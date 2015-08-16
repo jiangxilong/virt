@@ -329,17 +329,15 @@ inline QString runCommon(
 // Gets a list of the guest operating system disks
 inline QStringList volumeList(IGuestSession* session) {
 	const auto data = runCommon(session, { "fsutil.exe", "fsinfo", "drives" });
-	
-	QStringList result;
-	int begin = -1;
-	do {
-		int end = data.lastIndexOf('\\', begin);
-		if (end == -1) break;
-		begin = data.lastIndexOf(' ', end);
-		result.push_back( data.mid(begin + 1, end - begin) );
-	} while (--begin >= 0);
+	const auto size = data.size();
 
-	std::reverse(std::begin(result), std::end(result));
+	QStringList result;
+	for (int end = 0; end != size; ++end ) {
+		end = data.indexOf('\\', end);
+		if (end == -1) break;
+		int begin = data.lastIndexOf(' ', end);
+		result.push_back( data.mid(begin + 1, end - begin) );
+	}
 
 	return result;
 }
