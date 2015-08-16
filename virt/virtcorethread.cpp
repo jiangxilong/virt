@@ -4,8 +4,6 @@
 VirtCoreThread::VirtCoreThread(const MachineData& machine, QObject *parent) : 
 	QThread(parent),
 	machine_(machine),
-	successQuery_(false),
-	volumeInformation_(),
 	stop_(false)
 {
 
@@ -25,6 +23,7 @@ void VirtCoreThread::run() {
 	// ...
 	enum { waitPeriod = 120000 };
 	enum { delayLaunchVM = 3000 };
+	enum { delayLogin = 500 };
 
 	const CoInit coInit;
 	
@@ -67,11 +66,11 @@ void VirtCoreThread::run() {
 		}
 		else {
 			msleep(delayLaunchVM);
+			if (stop_) { return; }
 		}
 	}
 
 	// Login
-
 	const auto guestSession = createGuestSession(
 		session, 
 		machine_.userName, 
@@ -84,7 +83,6 @@ void VirtCoreThread::run() {
 		.arg(machine_.machine)
 	);
 
-	
 	if (!guestSession || !waitFor(
 		[&guestSession, this]() {
 			GuestSessionWaitResult temp;
@@ -116,7 +114,31 @@ void VirtCoreThread::run() {
 		.arg(machine_.machine)
 	);
 
-	volumeList(guestSession);
+	msleep(delayLogin);
+	if (stop_) { return; }
 
-	successQuery_ = !stop_;
+	// Get volume information
+	emit processMessage(tr("Get the volume list"));
+
+	const auto volumeList = ::volumeList(guestSession);
+	if (volumeList.isEmpty()) {
+		emit processMessage(tr("Failed to get the volume list"));
+		return;
+	}
+	if (stop_) { return; }
+
+	VolumeInformationList volumeInformationList;
+	volumeInformationList.reserve(volumeList.size());
+	for (auto& volume : volumeList) {
+		emit processMessage(tr("Get information for volume '%1'").arg(volume));
+		const auto volumeSize = ::volumeSize(volume);
+		volumeInformationList.push_back({
+			volume,
+			volumeSize.size,
+			volumeSize.freeSize
+		});
+		if (stop_) { return; }
+	}
+	
+	emit volumeInformation(machine_.machine, volumeInformationList);
 }

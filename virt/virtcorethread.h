@@ -6,8 +6,8 @@
 
 struct VolumeInformation {
 	QString volume;
-	quint64 size_;
-	quint64 freeSize_;
+	quint64 size;
+	quint64 freeSize;
 };
 
 struct MachineData {
@@ -28,14 +28,6 @@ public:
 public:
 	VirtCoreThread(const MachineData& machine, QObject *parent);
 	~VirtCoreThread();
-
-	VolumeInformationList volumeInformation() const {
-		return volumeInformation_;
-	}
-
-	bool successQuery() const {
-		return successQuery_;
-	}
 
 	void stop() { stop_ = true; }
 
@@ -61,14 +53,13 @@ public:
 
 signals:
 	void processMessage(const QString&);
+	void volumeInformation(const QString&, const VolumeInformationList&);
 
 protected:
 	virtual void run() Q_DECL_OVERRIDE;
 
 private:
 	const MachineData machine_;
-	bool successQuery_;
-	VolumeInformationList volumeInformation_;
 	volatile bool stop_;
 };
 

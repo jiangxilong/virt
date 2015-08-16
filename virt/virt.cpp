@@ -18,10 +18,6 @@ Virt::Virt(QWidget *parent)
 	updateMachineList();
 }
 
-Virt::~Virt() {
-	serialize(settings_, ui.machines);
-}
-
 void Virt::showMessage(const QString& message, int timeout) {
 	if (!message.isEmpty()) {
 		qDebug() << message;
@@ -119,4 +115,12 @@ void Virt::passwordOrUsernameChanged(QTableWidgetItem* item) {
 void Virt::updateCurrentMachineInformation() {
 	ui.volumes->setRowCount(0);
 	core_->volumeInformationQuery(machine(ui.machines->currentRow()));
+}
+
+void Virt::setVolumeInformation(const QString& machine, const VolumeInformationList& info) {
+
+}
+
+void Virt::closeEvent(QCloseEvent*) {
+	serialize(settings_, ui.machines);
 }

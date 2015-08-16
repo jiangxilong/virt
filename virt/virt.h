@@ -27,7 +27,6 @@ public:
 
 public:
 	Virt(QWidget *parent = 0);
-	~Virt();
 
 public:
 	int machineCount() const {
@@ -39,10 +38,14 @@ public:
 public slots:
 	void updateMachineList();
 	void updateCurrentMachineInformation();
+	void setVolumeInformation(const QString& machine, const VolumeInformationList& info);
 	void showMessage(const QString& message, int timeout = 0);
 
 private slots:
 	void passwordOrUsernameChanged(QTableWidgetItem* item);
+
+protected:
+	virtual void closeEvent(QCloseEvent*) Q_DECL_OVERRIDE;
 
 private:
 	Ui::virtClass ui;

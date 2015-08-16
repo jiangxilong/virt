@@ -74,9 +74,6 @@
     <ClCompile Include="vboxcore.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vbox\tstVBoxAPIWin.cpp">
-      <Filter>vbox</Filter>
-    </ClCompile>
     <ClCompile Include="vbox\VirtualBox_i.c">
       <Filter>vbox</Filter>
     </ClCompile>

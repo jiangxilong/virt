@@ -102,7 +102,6 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="vboxcore.cpp" />
-    <ClCompile Include="vbox\tstVBoxAPIWin.cpp" />
     <ClCompile Include="vbox\VirtualBox_i.c" />
     <ClCompile Include="virt.cpp" />
     <ClCompile Include="virtcore.cpp" />

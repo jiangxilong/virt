@@ -48,6 +48,10 @@ HRESULT vboxLastError() {
 	return resultStorage().localData().code();
 }
 
+QString vboxLastErrorString() {
+	return resultStorage().localData().str();
+}
+
 bool vboxCheck(HRESULT rc) {
 	const auto ok = SUCCEEDED(rc);
 	QString errorString;
@@ -81,11 +85,7 @@ bool vboxCheck(HRESULT rc) {
 			addInfomation(" \nGUID : ", CComBSTR(error.GUID()));
 			addInfomation(" \nHelpFile : ", error.HelpFile());
 		}
-
-		qWarning() << errorString;
 	}
-
-	resultStorage().setLocalData({ rc, errorString });
 
 	return ok;
 }

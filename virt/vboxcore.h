@@ -6,7 +6,6 @@
 #include <comdef.h>
 #include <atlbase.h>
 #include <atlcom.h>
-#include <atlsafe.h>
 
 #include "vbox/VirtualBox.h"
 #include "vbox/com/array.h"
@@ -37,11 +36,19 @@ inline CComBSTR to_bstr(const QByteArray& str) {
 	return (const char*)str;
 }
 
-// get last error ñode (threadsafe, thread local storage)
+// Get last error ñode (threadsafe, thread local storage)
 HRESULT vboxLastError();
 
-// check and report result (threadsafe, thread local storage)
+// Get last error string (threadsafe, thread local storage)
+QString vboxLastErrorString();
+
+// Check and report result (threadsafe, thread local storage)
 bool vboxCheck(HRESULT rc);
+
+// Check and report result macros
+// Using __FILE__, __LINE__, __FUNCSIG__ macros
+// (threadsafe, thread local storage)
+#define VBOX_CHECK(rc) ( vboxCheck(rc) ? true : (qWarning() << vboxLastErrorString(), false) )
 
 
 // CoCreateInstance
@@ -49,7 +56,7 @@ bool vboxCheck(HRESULT rc);
 template<class IType> inline
 CComPtr<IType> vboxCreate(REFCLSID rclsid) {
 	CComPtr<IType> ptr; 
-	return vboxCheck(ptr.CoCreateInstance(rclsid)) ? ptr : nullptr;
+	return VBOX_CHECK(ptr.CoCreateInstance(rclsid)) ? ptr : nullptr;
 }
 
 inline CComPtr<IVirtualBox> virtualBox() { 
@@ -65,14 +72,14 @@ inline CComPtr<IMachine> machineByName(
 	const QString& vmName
 ) {
 	CComPtr<IMachine> machine;
-	return vbox && vboxCheck(
+	return vbox && VBOX_CHECK(
 		vbox->FindMachine(to_bstr(vmName), &machine)
 	) ? machine : nullptr;
 }
 
 inline QString name(IMachine* machine, const QString& defValue = QString()) {
 	CComBSTR name;
-	return machine && vboxCheck(machine->get_Name(&name))
+	return machine && VBOX_CHECK(machine->get_Name(&name))
 		? toString(name) : defValue;
 }
 
@@ -81,7 +88,7 @@ inline MachineState state(
 	const MachineState& defState = MachineState_Null
 ) {
 	MachineState state = defState;
-	return machine && vboxCheck(machine->get_State(&state))
+	return machine && VBOX_CHECK(machine->get_State(&state))
 		? state : defState;
 }
 
@@ -98,25 +105,25 @@ inline bool lock(
 	ISession* session, 
 	LockType type = LockType_Shared
 ) {
-	return vboxCheck(machine->LockMachine(session, type));
+	return VBOX_CHECK(machine->LockMachine(session, type));
 }
 
 inline CComPtr<IProgress> launchVM(IMachine* machine, ISession* session) {
 	CComPtr<IProgress> progress;
-	return machine && session && vboxCheck(
+	return machine && session && VBOX_CHECK(
 		machine->LaunchVMProcess(session, CComBSTR("gui"), 0, &progress)
 	) ? progress : nullptr;
 }
 
 inline CComPtr<IConsole> console(ISession* session) {
 	CComPtr<IConsole> console;
-	return session && vboxCheck(session->get_Console(&console))
+	return session && VBOX_CHECK(session->get_Console(&console))
 		? console : nullptr;
 }
 
 inline CComPtr<IGuest> guest(IConsole* console) {
 	CComPtr<IGuest> guest;
-	return console && vboxCheck(console->get_Guest(&guest))
+	return console && VBOX_CHECK(console->get_Guest(&guest))
 		? guest : nullptr;
 }
 
@@ -124,10 +131,10 @@ inline CComPtr<IGuest> guest(ISession* session) {
 	return guest(console(session));
 }
 
-inline QByteArray toBase64(QString string){
+inline QByteArray toHex(QString string){
 	QByteArray ba;
 	ba.append(string);
-	return ba.toBase64();
+	return ba.toHex();
 }
 
 inline CComPtr<IGuestSession> createSession(
@@ -139,10 +146,10 @@ inline CComPtr<IGuestSession> createSession(
 		return nullptr;
 	}
 
-	const auto sessionName = to_bstr(toBase64(userName));
+	const auto sessionName = to_bstr('s' + toHex(userName));
 
 	com::SafeIfaceArray<IGuestSession> gsessions;
-	if (vboxCheck(guest->FindSession(
+	if (VBOX_CHECK(guest->FindSession(
 		sessionName, ComSafeArrayAsOutParam(gsessions)
 	))) {
 		if (gsessions.size() > 0) {
@@ -151,7 +158,7 @@ inline CComPtr<IGuestSession> createSession(
 	}
 
 	CComPtr<IGuestSession> gsession;
-	return vboxCheck(
+	return VBOX_CHECK(
 		guest->CreateSession(
 			to_bstr(userName), to_bstr(password),
 			nullptr, sessionName, &gsession
@@ -170,7 +177,7 @@ inline CComPtr<IGuestSession> createGuestSession(
 inline bool isCompleted(IProgress* process) {
 	BOOL bCompleted = FALSE;
 	return process
-		&& vboxCheck(process->get_Completed(&bCompleted))
+		&& VBOX_CHECK(process->get_Completed(&bCompleted))
 		&& (bCompleted == TRUE);
 }
 
@@ -179,7 +186,7 @@ inline GuestSessionStatus status(
 	const GuestSessionStatus& defaultStatus = GuestSessionStatus_Undefined
 ) {
 	GuestSessionStatus status = defaultStatus;
-	return (session && vboxCheck(session->get_Status(&status)))
+	return (session && VBOX_CHECK(session->get_Status(&status)))
 		? status : defaultStatus;
 }
 
@@ -204,7 +211,7 @@ inline ProcessStatus status(
 	const ProcessStatus& defaultStatus = ProcessStatus_Undefined
 	) {
 	ProcessStatus status = defaultStatus;
-	return process && vboxCheck(process->get_Status(&status))
+	return process && VBOX_CHECK(process->get_Status(&status))
 		? status : defaultStatus;
 }
 
@@ -228,13 +235,13 @@ struct SyncTimer {
 inline QString runCommon(
 	IGuestSession* session,
 	const QStringList& args
-) {
+	) {
 	enum { processTimeout = 120000 };
 	enum { processWaitTimeout = 5000 };
 	enum { processRestartTimeout = 1000 };
-	const ULONG stdoutHandle = 1ul;
-	const ULONG readSize = 0x00010000ul;
-	const ULONG readTimeOut = 5000;
+	enum { stdoutHandle = 1 };
+	enum { readSize = 0x00010000 };
+	enum { readTimeOut = 5000 };
 
 	if (!session) {
 		return nullptr;
@@ -257,7 +264,7 @@ inline QString runCommon(
 			rawArgs.push_back(to_bstr(arg));
 		}
 
-		if (!vboxCheck(session->ProcessCreate(
+		if (!VBOX_CHECK(session->ProcessCreate(
 			nullptr, ComSafeArrayAsInParam(rawArgs),
 			nullptr, ComSafeArrayAsInParam(createFlags),
 			processTimeout,
@@ -266,14 +273,14 @@ inline QString runCommon(
 			return nullptr;
 		}
 
-		com::SafeArray<ProcessWaitForFlag>    waitFlags;
+		com::SafeArray<ProcessWaitForFlag> waitFlags;
 		waitFlags.push_back(ProcessWaitForFlag_Start);
 		waitFlags.push_back(ProcessWaitForFlag_StdOut);
 		waitFlags.push_back(ProcessWaitForFlag_Terminate);
 
 		do {
 			ProcessWaitResult waitResult;
-			if (!vboxCheck(process->WaitForArray(
+			if (!VBOX_CHECK(process->WaitForArray(
 				ComSafeArrayAsInParam(waitFlags),
 				processWaitTimeout,
 				&waitResult
@@ -282,7 +289,7 @@ inline QString runCommon(
 			}
 
 			com::SafeArray<BYTE> outputData;
-			if (vboxCheck(process->Read(
+			if (VBOX_CHECK(process->Read(
 				stdoutHandle,
 				readSize,
 				readTimeOut,
@@ -290,17 +297,14 @@ inline QString runCommon(
 			))) {
 				const auto size = outputData.size();
 				if (size > 0) {
-					const auto stdoutString = consoleCodec(session)->toUnicode(
+					auto stdoutString = consoleCodec(session)->toUnicode(
 						(const char*)outputData.raw(), size
-					);
-
-					qDebug() << QString(stdoutString).replace('\0', ' ');
-
+					); 
+					stdoutString.replace('\0', ' ');
 					result += stdoutString;
 				}
 
 				if (waitResult == ProcessWaitResult_StdOut
-					|| waitResult == ProcessWaitResult_WaitFlagNotSupported
 					|| waitResult == ProcessWaitForFlag_Terminate) {
 					break;
 				}
@@ -314,15 +318,39 @@ inline QString runCommon(
 		QThread::msleep(processRestartTimeout);
 	} while (run());
 
+	if (!result.isEmpty()) {
+		qDebug() << args.join(" ");
+		qDebug() << result;
+	}
+
 	return result;
 }
 
 // Gets a list of the guest operating system disks
 inline QStringList volumeList(IGuestSession* session) {
-	auto data = runCommon(session, { "fsutil.exe", "fsinfo", "drives" });
+	const auto data = runCommon(session, { "fsutil.exe", "fsinfo", "drives" });
+	
+	QStringList result;
+	int begin = -1;
+	do {
+		int end = data.lastIndexOf('\\', begin);
+		if (end == -1) break;
+		begin = data.lastIndexOf(' ', end);
+		result.push_back( data.mid(begin + 1, end - begin) );
+	} while (--begin >= 0);
 
+	std::reverse(std::begin(result), std::end(result));
 
-	return QStringList();
+	return result;
+}
+
+struct VolumeSize {
+	quint64 size;
+	quint64 freeSize;
+};
+
+inline VolumeSize volumeSize(const QString& volume) {
+	return VolumeSize();
 }
 
 

@@ -2,22 +2,14 @@
 #include "vboxcore.h"
 
 VirtCore::VirtCore(QObject *parent)
-	: QObject(parent),
-	volumeInformation_(),
-	virtcorethread_(nullptr)
-{}
-
-VirtCore::~VirtCore()
-{
-
-}
+	: QObject(parent), virtcorethread_() {}
 
 QStringList VirtCore::machineList() {
 	QStringList names;
 
 	const auto vbox = virtualBox();
 	com::SafeIfaceArray<IMachine> machines;
-	if (!vbox || !vboxCheck(vbox->get_Machines(
+	if (!vbox || !VBOX_CHECK(vbox->get_Machines(
 		ComSafeArrayAsOutParam(machines)
 	))) {
 		emit processMessage(tr("Error: can't get the list of machines"));
@@ -46,40 +38,12 @@ QStringList VirtCore::machineList() {
 	return names;
 }
 
-void VirtCore::virtCoreThreadFinished() {
-	const auto sender = qobject_cast<VirtCoreThread*>(this->sender());
-	if (sender && sender != virtcorethread_) {
-		sender->deleteLater();
-		qWarning() << "invalid sender";
-		return;
-	}
-
-	if (!virtcorethread_) {
-		qWarning() << "null thread";
-		return;
-	}
-
-	if (virtcorethread_->isFinished()) {
-		if (virtcorethread_->successQuery()) {
-			volumeInformation_ = virtcorethread_->volumeInformation();
-			emit volumeInformationQueryFinished();
-		}
-	}
-	else {
-		virtcorethread_->stop();
-		virtcorethread_->wait();
-	}
-
-	auto tmp = virtcorethread_;
-	virtcorethread_ = 0;
-	tmp->deleteLater();
-}
-
 void VirtCore::volumeInformationQuery(const MachineData& machine) {
 	emit processMessage("Information update. Please, wait...");
 
 	if (virtcorethread_) {
-		virtCoreThreadFinished();
+		virtcorethread_->stop();
+		virtcorethread_->wait();
 	}
 
 	if (machine.machine.isEmpty()) {
@@ -98,14 +62,18 @@ void VirtCore::volumeInformationQuery(const MachineData& machine) {
 	virtcorethread_ = new VirtCoreThread(machine, this); 
 	
 	QObject::connect(
+		virtcorethread_, SIGNAL(finished()), 
+		virtcorethread_, SLOT(deleteLater())
+	);
+	QObject::connect(
 		virtcorethread_, SIGNAL(processMessage(QString)),
 		this, SIGNAL(processMessage(QString)),
 		Qt::QueuedConnection
 	);
 
 	QObject::connect(
-		virtcorethread_, SIGNAL(finished()), 
-		this, SLOT(virtCoreThreadFinished()),
+		virtcorethread_, SIGNAL(volumeInformation(VolumeInformationList)),
+		this, SIGNAL(volumeInformation(VolumeInformationList)),
 		Qt::QueuedConnection
 	);
 
