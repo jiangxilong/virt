@@ -121,15 +121,17 @@ void Virt::passwordOrUsernameChanged(QTableWidgetItem* item) {
 }
 
 void Virt::updateCurrentMachineInformation() {
-	ui.volumes->setRowCount(0);
-	core_->volumeInformationQuery(currentMachine());
+	if (machineCount() > 0) {
+		ui.volumes->setRowCount(0);
+		core_->volumeInformationQuery(currentMachine());
+	}
 }
 
 QString digitDiv(QString str, const QChar& div = QChar::Space, int divdim = 3) {
 	const auto sz = str.size();
 	if (sz > 0) {
 		for (int pos = sz; (pos -= divdim) > 0;) {
-			str.insert(pos, ' ');
+			str.insert(pos, div);
 		}
 	}
 	return str;

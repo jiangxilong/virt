@@ -23,7 +23,6 @@ inline QString toString(const wchar_t* str) {
 	return QString::fromWCharArray(str);
 }
 
-
 inline CComBSTR to_bstr(const std::wstring& str) {
 	return str.c_str();
 }
