@@ -1,4 +1,5 @@
 <RCC>
-    <qresource prefix="virt">
+    <qresource prefix="/">
+        <file>ru.qm</file>
     </qresource>
 </RCC>

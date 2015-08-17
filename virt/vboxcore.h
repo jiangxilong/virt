@@ -48,7 +48,9 @@ bool vboxCheck(HRESULT rc);
 // Check and report result macros
 // Using __FILE__, __LINE__, __FUNCSIG__ macros
 // (threadsafe, thread local storage)
-#define VBOX_CHECK(rc) ( vboxCheck(rc) ? true : (qWarning() << vboxLastErrorString(), false) )
+#define VBOX_CHECK(rc) (													\
+	vboxCheck(rc) ? true : (qWarning() << vboxLastErrorString(), false)		\
+)
 
 
 // CoCreateInstance
@@ -131,12 +133,6 @@ inline CComPtr<IGuest> guest(ISession* session) {
 	return guest(console(session));
 }
 
-inline QByteArray toHex(QString string){
-	QByteArray ba;
-	ba.append(string);
-	return ba.toHex();
-}
-
 inline CComPtr<IGuestSession> createSession(
 	IGuest* guest, 
 	const QString& userName,
@@ -146,22 +142,11 @@ inline CComPtr<IGuestSession> createSession(
 		return nullptr;
 	}
 
-	const auto sessionName = to_bstr('s' + toHex(userName));
-
-	com::SafeIfaceArray<IGuestSession> gsessions;
-	if (VBOX_CHECK(guest->FindSession(
-		sessionName, ComSafeArrayAsOutParam(gsessions)
-	))) {
-		if (gsessions.size() > 0) {
-			return gsessions[0];
-		}
-	}
-
 	CComPtr<IGuestSession> gsession;
 	return VBOX_CHECK(
 		guest->CreateSession(
 			to_bstr(userName), to_bstr(password),
-			nullptr, sessionName, &gsession
+			nullptr, nullptr, &gsession
 		)
 	) ? gsession : nullptr;
 }
@@ -172,6 +157,17 @@ inline CComPtr<IGuestSession> createGuestSession(
 	const QString& password
 ) {
 	return createSession(guest(session), userName, password);
+}
+
+inline bool waitForLogin(IGuestSession* session, quint32 timeout = 0) {
+	com::SafeArray<GuestSessionWaitForFlag> flags;
+	flags.push_back(GuestSessionWaitForFlag_Start);
+	//flags.push_back(GuestSessionWaitForFlag_Terminate);
+	//flags.push_back(GuestSessionWaitForFlag_Status);
+	GuestSessionWaitResult result;
+	return session && VBOX_CHECK(
+		session->WaitForArray(ComSafeArrayAsInParam(flags), timeout, &result))
+		&& (result == GuestSessionWaitResult_Start);
 }
 
 inline bool isCompleted(IProgress* process) {
@@ -203,7 +199,9 @@ inline bool isLogin(IGuestSession* session) {
 }
 
 inline bool isLoginFail(IGuestSession* session) {
-	return isLoginFail(status(session));
+	auto status = ::status(session);
+	qDebug() << status;
+	return isLoginFail(status);
 }
 
 inline ProcessStatus status(
@@ -231,7 +229,8 @@ struct SyncTimer {
 	}
 };
 
-// Analogue gctlHandleRunCommon, src/VBox/Frontends/VBoxManage/VBoxManageGuestCtrl.cpp
+// Analogue gctlHandleRunCommon, 
+// src/VBox/Frontends/VBoxManage/VBoxManageGuestCtrl.cpp
 inline QString runCommon(
 	IGuestSession* session,
 	const QStringList& args
@@ -299,8 +298,7 @@ inline QString runCommon(
 				if (size > 0) {
 					auto stdoutString = consoleCodec(session)->toUnicode(
 						(const char*)outputData.raw(), size
-					); 
-					stdoutString.replace('\0', ' ');
+					);
 					result += stdoutString;
 				}
 
@@ -319,8 +317,9 @@ inline QString runCommon(
 	} while (run());
 
 	if (!result.isEmpty()) {
-		qDebug() << args.join(" ");
-		qDebug() << result;
+		qDebug() <<
+			'\n' + args.join(" ") + 
+			'\n' + result;
 	}
 
 	return result;
@@ -328,11 +327,11 @@ inline QString runCommon(
 
 // Gets a list of the guest operating system disks
 inline QStringList volumeList(IGuestSession* session) {
-	const auto data = runCommon(session, { "fsutil.exe", "fsinfo", "drives" });
-	const auto size = data.size();
+	auto data = runCommon(session, { "fsutil.exe", "fsinfo", "drives" });
+	data.replace('\0', ' ');
 
 	QStringList result;
-	for (int end = 0; end != size; ++end ) {
+	for (int end = 0; end != data.size(); ++end) {
 		end = data.indexOf('\\', end);
 		if (end == -1) break;
 		int begin = data.lastIndexOf(' ', end);
@@ -343,13 +342,42 @@ inline QStringList volumeList(IGuestSession* session) {
 }
 
 struct VolumeSize {
-	quint64 size;
-	quint64 freeSize;
+	int64_t size;
+	int64_t freeSize;
 };
 
-inline VolumeSize volumeSize(const QString& volume) {
-	return VolumeSize();
+inline qint64 atoll(const QByteArray& str, const qint64 defValue = 0) {
+	const char* cstr = str.data();
+
+	char c = *cstr;
+	while (isspace(c)) {
+		c = *++cstr;
+	}
+
+	return ( c && (isdigit(c) || c == '-' || c == '+') ) 
+		? atoll(cstr) : defValue;
 }
 
+inline qint64 atoll(const QString& str, const qint64 defValue = 0) {
+	return atoll(str.toLocal8Bit(), defValue);
+}
+
+inline VolumeSize volumeSize(
+	IGuestSession* session, 
+	const QString& volume, 
+	const VolumeSize& defValue = { -1, -1 }
+) {
+	const auto data = runCommon(session, {
+		"fsutil.exe", "volume", "diskfree", volume 
+	});
+
+	const auto split = data.split(':', QString::SkipEmptyParts);
+	
+	return (split.size() == 4)
+		? VolumeSize{ 
+			atoll(split[1], defValue.size), 
+			atoll(split[2], defValue.freeSize) 
+		} : defValue;
+} 
 
 #endif

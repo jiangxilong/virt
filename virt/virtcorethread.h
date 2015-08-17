@@ -6,8 +6,8 @@
 
 struct VolumeInformation {
 	QString volume;
-	quint64 size;
-	quint64 freeSize;
+	qint64 size;
+	qint64 freeSize;
 };
 
 struct MachineData {
@@ -17,6 +17,8 @@ struct MachineData {
 };
 
 typedef QList<VolumeInformation> VolumeInformationList;
+
+Q_DECLARE_METATYPE(VolumeInformationList)
 
 class VirtCoreThread : public QThread
 {

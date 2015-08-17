@@ -6,7 +6,6 @@ VirtCoreThread::VirtCoreThread(const MachineData& machine, QObject *parent) :
 	machine_(machine),
 	stop_(false)
 {
-
 }
 
 VirtCoreThread::~VirtCoreThread() { 
@@ -21,9 +20,11 @@ void VirtCoreThread::run() {
 	// VBoxManage guestcontrol "Windows XP" --username "vbox" --password "12345" run fsutil.exe --wait-stdout -- fsinfo drives
 	// VBoxManage guestcontrol "Windows XP" --username "vbox" --password "12345" run fsutil.exe --wait-stdout -- volume diskfree c:\
 	// ...
-	enum { waitPeriod = 120000 };
+	enum { waitLaunchPeriod = 120000 };
+	enum { waitLoginPeriod = 10000 };
 	enum { delayLaunchVM = 3000 };
 	enum { delayLogin = 500 };
+	enum { reloginCount = 2 };
 
 	const CoInit coInit;
 	
@@ -50,7 +51,7 @@ void VirtCoreThread::run() {
 				progress->WaitForCompletion(ticPeriod);
 				return isCompleted(progress) && isRuning(machine);
 			},
-			waitPeriod
+			waitLaunchPeriod
 		)) {
 			if (progress) {
 				progress->Cancel();
@@ -71,43 +72,46 @@ void VirtCoreThread::run() {
 	}
 
 	// Login
-	const auto guestSession = createGuestSession(
-		session, 
-		machine_.userName, 
-		machine_.password
-	);
+	CComPtr<IGuestSession> guestSession;
+	const struct closer {
+		CComPtr<IGuestSession> session;
+		~closer() { if(session) session->Close(); }
+	} closeSession;
 
 	emit processMessage(
 		tr("Login user '%1' on machine '%2")
 		.arg(machine_.userName)
 		.arg(machine_.machine)
 	);
+	
+	bool sucessLogin = false;
+	for (int relogin = 0; relogin < reloginCount; ++relogin)
+	{
+		CComPtr<IGuestSession> guestSession = createGuestSession(
+			session,
+			machine_.userName,
+			machine_.password
+		);
 
-	if (!guestSession || !waitFor(
-		[&guestSession, this]() {
-			GuestSessionWaitResult temp;
-			guestSession->WaitFor(GuestSessionWaitForFlag_Start, ticPeriod, &temp);
-			auto status = ::status(guestSession);
-			if (isLogin(status)) {
+		if (guestSession && waitFor(
+			[&guestSession, this]() {
+			if (waitForLogin(guestSession, ticPeriod)) {
 				return true;
 			}
-			if (isLoginFail(status)) {
+			if (isLoginFail(guestSession)) {
 				this->stop_ = true; // login fail
 			}
 			return false;
-		},
-		waitPeriod
-	)) {
-		emit processMessage(
-			tr("Login failed for user '%1' on machine '%2'")
-			.arg(machine_.userName)
-			.arg(machine_.machine)
-		);
-
-		return;
+		}, waitLoginPeriod)) {
+			sucessLogin = true;
+			break;
+		} 
 	}
 	
-	
+	if (!sucessLogin) {
+
+	}
+
 	emit processMessage(
 		tr("Success login user '%1' on machine '%2")
 		.arg(machine_.userName)
@@ -131,7 +135,7 @@ void VirtCoreThread::run() {
 	volumeInformationList.reserve(volumeList.size());
 	for (auto& volume : volumeList) {
 		emit processMessage(tr("Get information for volume '%1'").arg(volume));
-		const auto volumeSize = ::volumeSize(volume);
+		const auto volumeSize = ::volumeSize(guestSession, volume);
 		volumeInformationList.push_back({
 			volume,
 			volumeSize.size,

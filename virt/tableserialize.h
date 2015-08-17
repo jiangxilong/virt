@@ -37,6 +37,16 @@ inline QTableWidgetItem* item(QTableWidget* table, int row, int column) {
 	return item;
 }
 
+inline QTableWidgetItem* setItemText(
+	QTableWidget* table, 
+	int row, int column,
+	const QString& text
+) {
+	const auto item = ::item(table, row, column);
+	item->setText(text);
+	return item;
+}
+
 inline void deserialize(QTableWidget* table, const QStringList& strings) {
 	const auto nColumn = table->columnCount();
 	if (nColumn > 0) {
@@ -45,7 +55,7 @@ inline void deserialize(QTableWidget* table, const QStringList& strings) {
 
 		table->setRowCount(nRow);
 		for (int i = 0; i < nItem; ++i) {
-			item(table, i / nColumn, i % nColumn)->setText(strings[i]);
+			setItemText(table, i / nColumn, i % nColumn, strings[i]);
 		}
 	}
 }

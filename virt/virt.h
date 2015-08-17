@@ -32,13 +32,22 @@ public:
 	int machineCount() const {
 		return ui.machines->rowCount();
 	}
+	
+	int currentMachineIndex() const {
+		return ui.machines->currentRow();
+	}
 
-	MachineData machine(int i);
+	MachineData machine(int i) const;
+
+	MachineData currentMachine() const {
+		return machine(currentMachineIndex());
+	}
 
 public slots:
 	void updateMachineList();
 	void updateCurrentMachineInformation();
-	void setVolumeInformation(const QString& machine, const VolumeInformationList& info);
+	void setVolumeInformation(
+		const QString& machine, const VolumeInformationList& info);
 	void showMessage(const QString& message, int timeout = 0);
 
 private slots:

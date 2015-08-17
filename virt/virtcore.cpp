@@ -20,7 +20,7 @@ QStringList VirtCore::machineList() {
 		const auto name = ::name(machines[i]);
 		if (name.isEmpty()) {
 			if(SUCCEEDED(vboxLastError())) {
-				emit processMessage(tr("Warning: exists an empty name"));
+				emit processMessage(tr("Warning: exists an empty machine name"));
 			}
 			else {
 				emit processMessage(tr("Error: can't get the machine name"));
@@ -39,7 +39,7 @@ QStringList VirtCore::machineList() {
 }
 
 void VirtCore::volumeInformationQuery(const MachineData& machine) {
-	emit processMessage("Information update. Please, wait...");
+	emit processMessage(tr("Information update. Please, wait..."));
 
 	if (virtcorethread_) {
 		virtcorethread_->stop();
@@ -72,8 +72,8 @@ void VirtCore::volumeInformationQuery(const MachineData& machine) {
 	);
 
 	QObject::connect(
-		virtcorethread_, SIGNAL(volumeInformation(VolumeInformationList)),
-		this, SIGNAL(volumeInformation(VolumeInformationList)),
+		virtcorethread_, SIGNAL(volumeInformation(QString,VolumeInformationList)),
+		this, SIGNAL(volumeInformation(QString,VolumeInformationList)),
 		Qt::QueuedConnection
 	);
 

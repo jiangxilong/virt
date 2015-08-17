@@ -1,6 +1,7 @@
 #include "virt.h"
 #include "tableserialize.h"
 
+enum { VOLUME_COLUMN_WIDTH = 70 };
 
 Virt::Virt(QWidget *parent)
 	: QMainWindow(parent),
@@ -8,11 +9,18 @@ Virt::Virt(QWidget *parent)
 	core_(new VirtCore(this))
 {
 	ui.setupUi(this);
+	ui.volumes->setColumnWidth(VOLUME_COLUMN, VOLUME_COLUMN_WIDTH);
+
 	deserialize(ui.machines, settings_);
 
 	QObject::connect(
 		core_, SIGNAL(processMessage(QString)),
 		this, SLOT(showMessage(QString))
+	);
+
+	QObject::connect(
+		core_, SIGNAL(volumeInformation(QString, VolumeInformationList)),
+		this, SLOT(setVolumeInformation(QString, VolumeInformationList))
 	);
 
 	updateMachineList();
@@ -34,7 +42,7 @@ QString text(QTableWidget* table, int row, int column) {
 	return item->text();
 }
 
-MachineData Virt::machine(int i) {
+MachineData Virt::machine(int i) const {
 	if (i < 0 || i > ui.machines->rowCount()) {
 		qWarning() << "out of range";
 		return{ QString(), QString(), QString() };
@@ -56,7 +64,7 @@ void Virt::updateMachineList() {
 	QSignalBlocker signalBlocker(ui.machines);
 
 	QHash<QString, Login> old;
-	auto current = ui.machines->currentRow();
+	auto current = currentMachineIndex();
 	if (current < 0) {
 		current = 0;
 	}
@@ -80,8 +88,8 @@ void Virt::updateMachineList() {
 		machineItem->setFlags(machineItem->flags() & ~Qt::ItemIsEditable);
 
 		const auto login = old.value(machine, defaultLogin);
-		item(ui.machines, i, USERNAME_COLUMN)->setText(login.userName);
-		item(ui.machines, i, PASSWORD_COLUMN)->setText(login.password);
+		setItemText(ui.machines, i, USERNAME_COLUMN, login.userName);
+		setItemText(ui.machines, i, PASSWORD_COLUMN, login.password);
 		if (machine == currentName) {
 			current = i;
 		}
@@ -103,7 +111,7 @@ void Virt::passwordOrUsernameChanged(QTableWidgetItem* item) {
 	}
 
 	const auto row = item->row();
-	if (row == ui.machines->currentRow()) {
+	if (row == currentMachineIndex()) {
 		auto machine = this->machine(row);
 		if (!machine.password.isEmpty()
 			&& !machine.userName.isEmpty() ) {
@@ -114,11 +122,42 @@ void Virt::passwordOrUsernameChanged(QTableWidgetItem* item) {
 
 void Virt::updateCurrentMachineInformation() {
 	ui.volumes->setRowCount(0);
-	core_->volumeInformationQuery(machine(ui.machines->currentRow()));
+	core_->volumeInformationQuery(currentMachine());
 }
 
-void Virt::setVolumeInformation(const QString& machine, const VolumeInformationList& info) {
+QString digitDiv(QString str, const QChar& div = QChar::Space, int divdim = 3) {
+	const auto sz = str.size();
+	if (sz > 0) {
+		for (int pos = sz; (pos -= divdim) > 0;) {
+			str.insert(pos, ' ');
+		}
+	}
+	return str;
+}
 
+void Virt::setVolumeInformation(const QString& machine, 
+	const VolumeInformationList& data) {
+	if (machine != currentMachine().machine) {
+		return;
+	}
+
+	showMessage("");
+
+	const auto setItemVolumeSize = [this](int row, int column, qint64 size) {
+		auto item = ::item(ui.volumes, row, column);
+		item->setText(
+			(size != -1) ? digitDiv(QString::number(size)) : tr("No data"));
+		item->setTextAlignment(Qt::AlignCenter);
+	};
+
+	ui.volumes->setRowCount(data.size());
+	for (int i = 0; i < data.size(); ++i ) {
+		const auto& volume = data[i];
+		setItemText(ui.volumes, i, VOLUME_COLUMN, volume.volume)
+			->setTextAlignment(Qt::AlignCenter);
+		setItemVolumeSize(i, TOTAL_SIZE_COLUMN, volume.size);
+		setItemVolumeSize(i, FREE_SIZE_COLUMN, volume.freeSize);
+	}
 }
 
 void Virt::closeEvent(QCloseEvent*) {
