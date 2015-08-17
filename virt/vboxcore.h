@@ -345,8 +345,8 @@ inline VolumeSize volumeSize(
 	
 	return (split.size() == 4)
 		? VolumeSize{ 
-			atoll(split[1], defValue.size), 
-			atoll(split[2], defValue.freeSize) 
+			atoll(split[2], defValue.size), 
+			atoll(split[1], defValue.freeSize) 
 		} : defValue;
 } 
 
