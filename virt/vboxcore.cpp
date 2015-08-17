@@ -87,6 +87,8 @@ bool vboxCheck(HRESULT rc) {
 		}
 	}
 
+	resultStorage().setLocalData({ rc, errorString });
+
 	return ok;
 }
 

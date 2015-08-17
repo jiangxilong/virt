@@ -162,8 +162,6 @@ inline CComPtr<IGuestSession> createGuestSession(
 inline bool waitForLogin(IGuestSession* session, quint32 timeout = 0) {
 	com::SafeArray<GuestSessionWaitForFlag> flags;
 	flags.push_back(GuestSessionWaitForFlag_Start);
-	//flags.push_back(GuestSessionWaitForFlag_Terminate);
-	//flags.push_back(GuestSessionWaitForFlag_Status);
 	GuestSessionWaitResult result;
 	return session && VBOX_CHECK(
 		session->WaitForArray(ComSafeArrayAsInParam(flags), timeout, &result))
@@ -175,33 +173,6 @@ inline bool isCompleted(IProgress* process) {
 	return process
 		&& VBOX_CHECK(process->get_Completed(&bCompleted))
 		&& (bCompleted == TRUE);
-}
-
-inline GuestSessionStatus status(
-	IGuestSession* session,
-	const GuestSessionStatus& defaultStatus = GuestSessionStatus_Undefined
-) {
-	GuestSessionStatus status = defaultStatus;
-	return (session && VBOX_CHECK(session->get_Status(&status)))
-		? status : defaultStatus;
-}
-
-inline bool isLogin(GuestSessionStatus status) {
-	return status == GuestSessionStatus_Started;
-}
-
-inline bool isLoginFail(GuestSessionStatus status) {
-	return status == GuestSessionStatus_Error;
-}
-
-inline bool isLogin(IGuestSession* session) {
-	return isLogin(status(session));
-}
-
-inline bool isLoginFail(IGuestSession* session) {
-	auto status = ::status(session);
-	qDebug() << status;
-	return isLoginFail(status);
 }
 
 inline ProcessStatus status(

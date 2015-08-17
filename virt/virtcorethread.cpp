@@ -21,10 +21,10 @@ void VirtCoreThread::run() {
 	// VBoxManage guestcontrol "Windows XP" --username "vbox" --password "12345" run fsutil.exe --wait-stdout -- volume diskfree c:\
 	// ...
 	enum { waitLaunchPeriod = 120000 };
-	enum { waitLoginPeriod = 10000 };
-	enum { delayLaunchVM = 3000 };
+	enum { waitLoginPeriod = 2000 };
+	enum { delayLaunchVM = 5000 };
 	enum { delayLogin = 500 };
-	enum { reloginCount = 2 };
+	enum { reloginCount = 3 };
 
 	const CoInit coInit;
 	
@@ -60,7 +60,7 @@ void VirtCoreThread::run() {
 			if (!stop_) {
 				emit processMessage(
 					tr("Launch error for machine '%1'").arg(machine_.machine)
-					);
+				);
 			}
 
 			return;
@@ -73,10 +73,10 @@ void VirtCoreThread::run() {
 
 	// Login
 	CComPtr<IGuestSession> guestSession;
-	const struct closer {
+	struct closer {
 		CComPtr<IGuestSession> session;
 		~closer() { if(session) session->Close(); }
-	} closeSession;
+	} closeSession = { nullptr };
 
 	emit processMessage(
 		tr("Login user '%1' on machine '%2")
@@ -87,30 +87,31 @@ void VirtCoreThread::run() {
 	bool sucessLogin = false;
 	for (int relogin = 0; relogin < reloginCount; ++relogin)
 	{
-		CComPtr<IGuestSession> guestSession = createGuestSession(
+		guestSession = createGuestSession(
 			session,
 			machine_.userName,
 			machine_.password
 		);
-
-		if (guestSession && waitFor(
-			[&guestSession, this]() {
-			if (waitForLogin(guestSession, ticPeriod)) {
-				return true;
-			}
-			if (isLoginFail(guestSession)) {
-				this->stop_ = true; // login fail
-			}
-			return false;
-		}, waitLoginPeriod)) {
+		
+		if (guestSession && waitFor([&guestSession, this]() {
+				return waitForLogin(guestSession, ticPeriod);
+			}, waitLoginPeriod)) {
 			sucessLogin = true;
 			break;
-		} 
+		}
 	}
 	
 	if (!sucessLogin) {
+		emit processMessage(
+			tr("Login failed for user '%1' on machine '%2'")
+			.arg(machine_.userName)
+			.arg(machine_.machine)
+		);
 
+		return;
 	}
+
+	closeSession.session = guestSession;
 
 	emit processMessage(
 		tr("Success login user '%1' on machine '%2")
